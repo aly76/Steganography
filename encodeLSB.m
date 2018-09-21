@@ -1,19 +1,22 @@
-function [stegoImage, originalImg, nSamples, nBits] = encodeLSB(cover, payload, nBits)
+function [nSamples, nBits, isImage, payloadDim, payloadLength] = encodeLSB(cover, payload, nBits)
     % Encoder for LSB method of steganography
+    % Generates the watermarked image in current working directory e.g.'originalImage_640_watermarked.bmp'
     % Alan Ly & Alex Chin, 2018
     % 
     % Inputs
     % cover - Source image used to carry the message e.g. 'originalImage_640.png'
-    % payload - Message to be embedded into the original image 
+    % payload - Message to be embedded into the original image e.g. 'Text' or 'tinyImage_320.bmp'
     % nBits - No. of bits per sample/pixel allocated to the message
     % 
     % Outputs
-    % stegoImage - Pixel values of the image with embedded message
-    % originalImg - Pixel values of the original image
-    % nSamples - Number of samples in the image that contain the message, used by the decoder
-    % nBits - Same as above, used by the decoder. Provided for convenience...
-    % in reality only the intended receipient of the message would have these
-    
+    % Provided for convenience... 
+    % Used by the decoder to extract message
+    % In reality, only the intended receipient of the message would know these
+    % nSamples - Number of samples in the image that contain the message
+    % nBits - Same as above 
+    % isImage - Whether the payload is an image or string 
+    % payloadDim - resolution of the payload (if it's an image)
+    % payloadLength - no. bits in the payload...used by decoder if nBits is odd
     %% Parse function arguments
     [extension, filename] = regexp(cover, '\.\w*', 'match', 'split', 'ignorecase');
     
@@ -28,6 +31,17 @@ function [stegoImage, originalImg, nSamples, nBits] = encodeLSB(cover, payload, 
         end 
     end 
     assert(supportFlag ~= 0, 'The file extension is not supported') 
+    
+    % Determine whether the payload is a string or image
+    [payloadExtension, payloadFilename] = regexp(payload, '\.\w*', 'match', 'split', 'ignorecase'); 
+    if (~isempty(payloadExtension))
+        payload = imread(payloadFilename{1}, payloadExtension{1}(2:end)); 
+        isImage = 1;
+        payloadDim = size(payload); 
+    else 
+        isImage = 0;
+        payloadDim = nan; 
+    end 
     
     if (nBits >= 8 || nBits <=0) % function is currently restricted to uint8, behaviour with different colour depths is un-tested
         error('nBits must be between 1 and 7');
@@ -44,22 +58,44 @@ function [stegoImage, originalImg, nSamples, nBits] = encodeLSB(cover, payload, 
     % argument, but this is not ideal.
     bitsPerSample = 8; 
     
-    payload_bin = de2bi(uint8(payload), bitsPerSample)'; % Convert payload to binary ASCII values 
+    % Convert payload to binary values
+    if (isImage == 1) 
+        payload_bin = de2bi(payload)';
+    else 
+        payload_bin = de2bi(uint8(payload), bitsPerSample)';  % Convert string into binary ASCII values
+    end 
     payload_bin = payload_bin(:); % Concatenate payload into a single column vector
     
-    pixelValues = de2bi(originalImg); % binary pixel values
-    nSamples = length(payload_bin) / nBits; % Calculate capacity required for payload
+    payloadLength = length(payload_bin); 
+    nSamples = ceil(payloadLength / nBits); % Calculate capacity required for payload
+    
+    % Determine if the payload will fit inside the cover image
+    imgDim = size(originalImg);
+    nPixels = imgDim(1)*imgDim(2);
+    if (nSamples > (nPixels*3))
+        error('The size of the payload exceeds the capacity of the cover image');
+    end 
+    
+    pixelValues = de2bi(originalImg); % binary pixel values    
     payloadCounter = 1; 
-    for i = 1:nSamples 
-        pixelValues(i, 1:nBits) = payload_bin(payloadCounter : payloadCounter + nBits - 1); % Embed payload
-        payloadCounter = payloadCounter + nBits; 
+    if (mod(nBits,2)) % If nBits is odd 
+        for i = 1:(nSamples-1) 
+            pixelValues(i, 1:nBits) = payload_bin(payloadCounter : payloadCounter + nBits - 1); % Embed payload
+            payloadCounter = payloadCounter + nBits; 
+        end 
+        % When nBits is odd, it doesn't divide evenly into payloadLength, so
+        % there are leftover bits in the final sample that have to be accounted for
+        bitsRemaining = mod(payloadLength, nBits);
+        pixelValues(nSamples, 1:bitsRemaining) = payload_bin(payloadCounter : payloadCounter + bitsRemaining - 1);
+    else 
+        for i = 1:nSamples 
+            pixelValues(i, 1:nBits) = payload_bin(payloadCounter : payloadCounter + nBits - 1); % Embed payload
+            payloadCounter = payloadCounter + nBits; 
+        end 
     end 
     
     % Reconstruct image with embedded message
     pixelValues = bi2de(pixelValues); % uint8 pixel values
-    
-    imgDim = size(originalImg); 
-    nPixels = imgDim(1)*imgDim(2);
     
     stegoImage(:,:,1) = vec2mat(pixelValues(1 : nPixels), imgDim(1))';
     stegoImage(:,:,2) = vec2mat(pixelValues(nPixels+1 : 2*nPixels), imgDim(1))'; 
@@ -67,23 +103,4 @@ function [stegoImage, originalImg, nSamples, nBits] = encodeLSB(cover, payload, 
     
     imwrite(stegoImage, [filename{1} '_watermarked' extension{1}]);
     
-%     j = 1; 
-%     k = 1
-%     while (sampleNo ~= nSamples)
-%         pixelValue = de2bi(originalImg(j,k,1)); % change each decimal value to binary value
-%         pixelValue() = payload_bin(rownum, columnnum)
-%         embed = [zeros(1,nBits) pixelValue(bitsPerSample-(bitsPerSample-nBits)+1 : end)]; % replace the LSB with 0s | the MSB and LSB is actually flipped
-%         stegoImage(j,k,i) = bi2de(embed);
-%     end 
-%     
-%     for j=1:imgDim(1)
-%         for k=1:imgDim(2)
-%             pixelValue = de2bi(originalImg(j,k,i)); % change each decimal value to binary value
-%             embed = [zeros(1,nBits) pixelValue(bitsPerSample-(bitsPerSample-nBits)+1 : end)]; % replace the LSB with 0s | the MSB and LSB is actually flipped
-%             stegoImage(j,k,i) = bi2de(embed); % convert back to decimal and place back in image
-%         end
-%     end
-    
-       
-        
 end 
