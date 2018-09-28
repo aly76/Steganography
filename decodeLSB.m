@@ -1,4 +1,4 @@
-function message = decodeLSB(stegoImage, nSamples, nBits, isImage, payloadDim, payloadLength)
+function message = decodeLSB(stegoImage, nSamples, nBits, isImage, payloadDim, payloadLength, alloc)
     % Decoder for LSB method of steganography
     % If payload is an image, generates decoded image in current working directory ('decodedImage.bmp')
     % If payload is a string, the decoded message is stored in 'message' output
@@ -12,6 +12,7 @@ function message = decodeLSB(stegoImage, nSamples, nBits, isImage, payloadDim, p
     % isImage - whether the payload is an image or string
     % payloadDim - resolution of the payload (if it's an image)
     % payloadLength - no. bits in the payload...used if nBits is odd 
+    % alloc - the algorithm used for allocation of payload e.g. pseudo-random
     %
     % Outputs 
     % message - the decoded message (NaN if the payload is an image)
@@ -20,23 +21,43 @@ function message = decodeLSB(stegoImage, nSamples, nBits, isImage, payloadDim, p
     pixelValues = de2bi(pixelValues); % binary pixel values 
     
     % Extract message bits from the stegoimage
-    counter = 1; 
-    if (mod(nBits,2)) %If nBits is odd
-        for i = 1: (nSamples-1) 
-            message(counter: counter + nBits - 1) = pixelValues(i, 1:nBits);
-            counter = counter + nBits; 
-        end
-        % When nBits is odd, it doesn't divide evenly into payloadLength, so
-        % there are leftover bits in the final sample that have to be accounted for
-        bitsRemaining = mod(payloadLength,nBits); 
-        message(counter : counter + bitsRemaining - 1) = pixelValues(nSamples, 1:bitsRemaining); 
-    else
-        for i = 1: nSamples 
-            message(counter: counter + nBits - 1) = pixelValues(i, 1:nBits);
-            counter = counter + nBits; 
+    counter = 1;
+    % This section can be shortened in the future, but I opted for the least
+    % amount of computations
+    if (isnan(alloc))
+        if (mod(nBits,2)) %If nBits is odd
+            for i = 1: (nSamples-1) 
+                message(counter: counter + nBits - 1) = pixelValues(i, 1:nBits);
+                counter = counter + nBits; 
+            end
+            % When nBits is odd, it doesn't divide evenly into payloadLength, so
+            % there are leftover bits in the final sample that have to be accounted for
+            bitsRemaining = mod(payloadLength,nBits); 
+            message(counter : counter + bitsRemaining - 1) = pixelValues(nSamples, 1:bitsRemaining); 
+        else
+            for i = 1: nSamples 
+                message(counter: counter + nBits - 1) = pixelValues(i, 1:nBits);
+                counter = counter + nBits; 
+            end 
         end 
+    else % extract according to the allocation algorithm
+        if (mod(nBits,2)) %If nBits is odd
+            for i = 1: (nSamples-1) 
+                message(counter: counter + nBits - 1) = pixelValues(alloc(i), 1:nBits);
+                counter = counter + nBits; 
+            end
+            % When nBits is odd, it doesn't divide evenly into payloadLength, so
+            % there are leftover bits in the final sample that have to be accounted for
+            bitsRemaining = mod(payloadLength,nBits); 
+            message(counter : counter + bitsRemaining - 1) = pixelValues(alloc(nSamples), 1:bitsRemaining); 
+        else
+            for i = 1: nSamples 
+                message(counter: counter + nBits - 1) = pixelValues(alloc(i), 1:nBits);
+                counter = counter + nBits; 
+            end 
+        end
     end 
-    
+        
     message = vec2mat(message, 8); % Group the message bits into bytes  
     message = bi2de(message); % convert to decimal
      

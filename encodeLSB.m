@@ -1,4 +1,4 @@
-function [nSamples, nBits, isImage, payloadDim, payloadLength] = encodeLSB(cover, payload, nBits)
+function [nSamples, nBits, isImage, payloadDim, payloadLength, alloc, imgDim] = encodeLSB(cover, payload, nBits, varargin)
     % Encoder for LSB method of steganography
     % Generates the watermarked image in current working directory e.g.'originalImage_640_watermarked.bmp'
     % Alan Ly & Alex Chin, 2018
@@ -17,6 +17,7 @@ function [nSamples, nBits, isImage, payloadDim, payloadLength] = encodeLSB(cover
     % isImage - Whether the payload is an image or string 
     % payloadDim - resolution of the payload (if it's an image)
     % payloadLength - no. bits in the payload...used by decoder if nBits is odd
+    % alloc - the algorithm used for allocation of payload e.g. pseudo-random
     %% Parse function arguments
     [extension, filename] = regexp(cover, '\.\w*', 'match', 'split', 'ignorecase');
     
@@ -47,6 +48,15 @@ function [nSamples, nBits, isImage, payloadDim, payloadLength] = encodeLSB(cover
         error('nBits must be between 1 and 7');
     end 
     
+    pin = inputParser; 
+    pin.addParameter('Order', 'sequential', @ischar); 
+    pin.parse(varargin{:}); 
+    
+    order = pin.Results.Order; 
+    if (~ (strcmpi(order, 'sequential') || strcmpi(order, 'pseudo')))
+        error('Order specified does not exist'); 
+    end 
+    
     %% Embed payload into cover image
     originalImg = imread(filename{1}, extension{1}(2:end)); 
     
@@ -74,25 +84,56 @@ function [nSamples, nBits, isImage, payloadDim, payloadLength] = encodeLSB(cover
     nPixels = imgDim(1)*imgDim(2);
     if (nSamples > (nPixels*3))
         error('The size of the payload exceeds the capacity of the cover image');
+    end  
+    
+    pixelValues = de2bi(originalImg); % binary pixel values  
+      
+    if (strcmpi(order, 'pseudo'))
+        alloc = randperm(length(pixelValues), length(pixelValues)); % Algorithm for allocating payload
+        isPseudo = 1; 
+    else 
+        alloc = nan;
+        isPseudo = 0; 
+    end
+    
+    payloadCounter = 1; 
+    
+    % This section can be cleaned up to reduce code length, but I opted to
+    % reduce the number of computations
+    if (isPseudo)
+        if (mod(nBits,2)) % If nBits is odd 
+            for i = 1:(nSamples-1) 
+                pixelValues(alloc(i), 1:nBits) = payload_bin(payloadCounter : payloadCounter + nBits - 1); % Embed payload
+                payloadCounter = payloadCounter + nBits; 
+            end 
+            % When nBits is odd, it doesn't divide evenly into payloadLength, so
+            % there are leftover bits in the final sample that have to be accounted for
+            bitsRemaining = mod(payloadLength, nBits);
+            pixelValues(alloc(nSamples), 1:bitsRemaining) = payload_bin(payloadCounter : payloadCounter + bitsRemaining - 1);
+        else 
+            for i = 1:nSamples 
+                pixelValues(alloc(i), 1:nBits) = payload_bin(payloadCounter : payloadCounter + nBits - 1); % Embed payload
+                payloadCounter = payloadCounter + nBits; 
+            end 
+        end 
+    else 
+        if (mod(nBits,2)) % If nBits is odd 
+            for i = 1:(nSamples-1) 
+                pixelValues(i, 1:nBits) = payload_bin(payloadCounter : payloadCounter + nBits - 1); % Embed payload
+                payloadCounter = payloadCounter + nBits; 
+            end 
+            % When nBits is odd, it doesn't divide evenly into payloadLength, so
+            % there are leftover bits in the final sample that have to be accounted for
+            bitsRemaining = mod(payloadLength, nBits);
+            pixelValues(nSamples, 1:bitsRemaining) = payload_bin(payloadCounter : payloadCounter + bitsRemaining - 1);
+        else 
+            for i = 1:nSamples 
+                pixelValues(i, 1:nBits) = payload_bin(payloadCounter : payloadCounter + nBits - 1); % Embed payload
+                payloadCounter = payloadCounter + nBits; 
+            end 
+        end 
     end 
     
-    pixelValues = de2bi(originalImg); % binary pixel values    
-    payloadCounter = 1; 
-    if (mod(nBits,2)) % If nBits is odd 
-        for i = 1:(nSamples-1) 
-            pixelValues(i, 1:nBits) = payload_bin(payloadCounter : payloadCounter + nBits - 1); % Embed payload
-            payloadCounter = payloadCounter + nBits; 
-        end 
-        % When nBits is odd, it doesn't divide evenly into payloadLength, so
-        % there are leftover bits in the final sample that have to be accounted for
-        bitsRemaining = mod(payloadLength, nBits);
-        pixelValues(nSamples, 1:bitsRemaining) = payload_bin(payloadCounter : payloadCounter + bitsRemaining - 1);
-    else 
-        for i = 1:nSamples 
-            pixelValues(i, 1:nBits) = payload_bin(payloadCounter : payloadCounter + nBits - 1); % Embed payload
-            payloadCounter = payloadCounter + nBits; 
-        end 
-    end 
     
     % Reconstruct image with embedded message
     pixelValues = bi2de(pixelValues); % uint8 pixel values

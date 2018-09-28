@@ -6,38 +6,38 @@ passage = 'Invisible watermarking involves embedding a message (like an identifi
 
 %% Encode 
 
-[nSamples, nBits, isImage, payloadDim, payloadLength, imgDim] = encodeLSB('Aerobatics_2000x1500.bmp', 'BowlCrowd_640.bmp', 1);
+[nSamples, nBits, isImage, payloadDim, payloadLength, alloc, imgDim] = encodeLSB('Aerobatics_2000x1500.bmp', 'BowlCrowd_640.bmp', 7, 'Order', 'pseudo');
 
 %% Modifications to the encoded image e.g compression, decimation
  filename = 'Aerobatics_2000x1500_watermarked.bmp';
  i_Array = imread(filename); 
  
-%  ref = imread('Aerobatics_2000x1500.bmp'); % Unwatermarked cover image
+ ref = imread('Aerobatics_2000x1500.bmp'); % Unwatermarked cover image
 
 % Decimate image
-Dec_Factor = 3; % Decimation factor 
-Dec_counter_i=0;
-for i = 1:3 
-    for j = 1:imgDim(1)
-        Dec_counter_i=Dec_counter_i+1;
-            if Dec_counter_i==Dec_Factor
-                Dec_counter_i=0;
-                Dec_counter_j=0;
-                for k=1:imgDim(2)
-                    Dec_counter_j=Dec_counter_j+1;
-                    if Dec_counter_j==Dec_Factor
-                        Dec_counter_j=0;
-                    else
-                        i_Array(j,k,i)=0;
-                    end
-                end
-            else
-                for k=1:imgDim(2)
-                    i_Array(j,k,i)=0;
-                end
-            end
-    end
-end 
+% Dec_Factor = 3; % Decimation factor 
+% Dec_counter_i=0;
+% for i = 1:3 
+%     for j = 1:imgDim(1)
+%         Dec_counter_i=Dec_counter_i+1;
+%             if Dec_counter_i==Dec_Factor
+%                 Dec_counter_i=0;
+%                 Dec_counter_j=0;
+%                 for k=1:imgDim(2)
+%                     Dec_counter_j=Dec_counter_j+1;
+%                     if Dec_counter_j==Dec_Factor
+%                         Dec_counter_j=0;
+%                     else
+%                         i_Array(j,k,i)=0;
+%                     end
+%                 end
+%             else
+%                 for k=1:imgDim(2)
+%                     i_Array(j,k,i)=0;
+%                 end
+%             end
+%     end
+% end 
 
 % Gaussian filtering
 % i_Array = imgaussfilt(i_Array, 0.5); % s.d. = 0.5 
@@ -48,16 +48,16 @@ end
 % i_Array(:,:,3) = awgn(double(i_Array(:,:,3)), 20, 'measured'); 
 
 % PSNR of stegoimage
-% psnr(i_Array, ref)
+psnr(i_Array, ref)
 
-imwrite(i_Array, filename); 
+% imwrite(i_Array, filename); 
 %% Decode
 
-message = decodeLSB('Aerobatics_2000x1500_watermarked.bmp', nSamples, nBits, isImage, payloadDim, payloadLength);
+message = decodeLSB('Aerobatics_2000x1500_watermarked.bmp', nSamples, nBits, isImage, payloadDim, payloadLength, alloc);
 
 %% Post-decoding 
 
 % PSNR of decoded payload 
-refPayload = imread('BowlCrowd_640.bmp'); % Original payload
-decPayload = imread('decodedImage.bmp'); % Decoded payload
-psnr(decPayload, refPayload) 
+% refPayload = imread('BowlCrowd_640.bmp'); % Original payload
+% decPayload = imread('decodedImage.bmp'); % Decoded payload
+% psnr(decPayload, refPayload) 
